@@ -1,0 +1,20 @@
+name: WOFOSTGym
+channels:
+  - defaults
+dependencies:
+  - bzip2=1.0.8
+  - ca-certificates=2025.7.15
+  - libffi=3.4.4
+  - ncurses=6.5
+  - tzdata=2025c
+  - xz=5.6.4
+  - zlib=1.2.13
+  - expat=2.7.1
+  - openssl=3.0.17
+  - readline=8.3
+  - tk=8.6.15
+  - sqlite=3.50.2
+  - python=3.12.11
+  - setuptools=78.1.1
+  - wheel=0.45.1
+  - pip=25.3
