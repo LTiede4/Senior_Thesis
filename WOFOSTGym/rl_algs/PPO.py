@@ -25,7 +25,7 @@ import glob
 
 @dataclass
 class Args(RL_Args):
-    total_timesteps: int = 20000 # 5000000   # 1000000
+    total_timesteps: int = 5000000   # 1000000
     """total timesteps of the experiments"""
     learning_rate: float = 2.5e-4
     """the learning rate of the optimizer"""
