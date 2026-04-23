@@ -18,10 +18,14 @@ from torch.distributions.categorical import Categorical
 from typing import Optional
 from rl_algs.rl_utils import RL_Args, Agent, setup, eval_policy
 
+import subprocess
+import os
+from pathlib import Path
+import glob
 
 @dataclass
 class Args(RL_Args):
-    total_timesteps: int = 5000000   # 1000000
+    total_timesteps: int = 50000 # 5000000   # 1000000
     """total timesteps of the experiments"""
     learning_rate: float = 2.5e-4
     """the learning rate of the optimizer"""
@@ -125,7 +129,81 @@ class PPO(nn.Module, Agent):
             action = probs.sample()
         return action, probs.log_prob(action), probs.entropy(), self.critic(x)
 
+# runs at periodic iterations
+def run_intermediate_scripts(curr_iteration) :
+    """
+    Find the most recently created folder matching the pattern
 
+    Must change the following variables in this script depending on the test:
+     - current_model_name
+     - --npk.output-vars
+    """
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    # CHANGE THIS NAME
+    current_model_name = "unconstrained_test"
+    pattern = "PPO/grape-lnpkw-v0__rl_utils__1__*"
+    folders = glob.glob(os.path.join(base_dir, "data/grapevine", current_model_name, pattern))
+    # check if folder exists
+    if not folders :
+        return None
+    dynamic_folder = max(folders, key=os.path.getctime)
+
+    rel_dynamic_folder = os.path.relpath(dynamic_folder, start=base_dir)
+    rel_current_iteration_folder = os.path.join(rel_dynamic_folder, str(curr_iteration)) + "/"
+    rel_agent_path = os.path.join(rel_dynamic_folder, "agent.pt")
+    data_filename = f"{current_model_name}.npz"
+    rel_data_file_path = os.path.join(rel_current_iteration_folder, data_filename)
+
+    # Command 1: Generate data
+    cmd1 = [
+        "python", "-m", "data_generation.gen_data",
+        "--save-folder", rel_current_iteration_folder,
+        "--data-file", current_model_name,
+        "--agent-path", os.path.join(rel_dynamic_folder, "agent.pt"),
+        "--agent-type", "PPO",
+        "--year-low", "1987", "--year-high", "1987",
+        "--lat-low", "46", "--lat-high", "46",
+        "--lon-low", "-120", "--lon-high", "-120",
+        "--file-type", "npz",
+        "--env-id", "grape-lnpkw-v0",
+        "--agro-file", "grape_agro.yaml",
+        "--npk.output-vars", "LAI", "FIN", "DVS", "WSO", "NAVAIL", "PAVAIL", "KAVAIL", "SM", "TOTN", "TOTP", "TOTK", "TOTIRRIG"
+    ]
+    # Command 2: Plot output
+    cmd2 = [
+        "python", "-m", "data_plotting.vis_data",
+        "--plt", "plot_output",
+        "--data_file", rel_data_file_path,
+        "--fig-folder", rel_current_iteration_folder
+    ]
+    # Command 3: Plot policy
+    cmd3 = [
+        "python", "-m", "data_plotting.vis_data",
+        "--plt", "plot_policy",
+        "--data_file", rel_data_file_path,
+        "--fig-folder", rel_current_iteration_folder
+    ]
+
+    # first make the current iteration directory 
+    abs_iteration_folder = os.path.join(dynamic_folder, str(curr_iteration))
+    os.makedirs(abs_iteration_folder, exist_ok=True)
+    # Run them sequentially
+    try:
+        print(f"Running scripts for iteration {curr_iteration} in {rel_current_iteration_folder}")
+        print("Running data generation...")
+        subprocess.run(cmd1, check=True, cwd=base_dir)
+        print("Running plot output...")
+        subprocess.run(cmd2, check=True, cwd=base_dir)
+        print("Running plot policy...")
+        subprocess.run(cmd3, check=True, cwd=base_dir)  
+    except subprocess.CalledProcessError as e:
+        print(f"Error in iteration {curr_iteration}:")
+        print(f"Command: {' '.join(e.cmd)}")
+        print(f"Error output: {e.stderr}")
+        return None
+
+
+ 
 def train(kwargs: Namespace) -> None:
     """
     PPO Training Function
@@ -155,6 +233,9 @@ def train(kwargs: Namespace) -> None:
     next_obs, _ = envs.reset(seed=args.seed)
     next_obs = torch.Tensor(next_obs).to(device)
     next_done = torch.zeros(args.num_envs).to(device)
+
+    num_eval_runs = 3
+    interval = max(1, args.num_iterations // num_eval_runs)
 
     for iteration in range(1, args.num_iterations + 1):
         print(f"iteration: {iteration}")
@@ -280,5 +361,10 @@ def train(kwargs: Namespace) -> None:
         writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
         #writer.add_scalar("charts/elapsed_time", f"{time.time() - start_time:0.4f}", global_step)
         writer.add_scalar("charts/elapsed_time", float(time.time() - start_time), global_step)   # fix for caffe2 dependency failure
+
+        # Run the function at specified intervals
+        if iteration % interval == 0 :
+            run_intermediate_scripts(iteration)
+
     envs.close()
     writer.close()
