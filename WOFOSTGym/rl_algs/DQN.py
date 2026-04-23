@@ -19,10 +19,14 @@ import torch.optim as optim
 from stable_baselines3.common.buffers import ReplayBuffer
 from rl_algs.rl_utils import RL_Args, Agent, setup, eval_policy
 
+import subprocess
+import os
+from pathlib import Path
+import glob
 
 @dataclass
 class Args(RL_Args):
-    total_timesteps: int = 5000000   # 1000000
+    total_timesteps: int = 20000 # 5000000   # 1000000
     """total timesteps of the experiments"""
     learning_rate: float = 2.5e-4
     """the learning rate of the optimizer"""
@@ -89,6 +93,80 @@ def linear_schedule(start_e: float, end_e: float, duration: int, t: int) -> floa
     return max(slope * t + start_e, end_e)
 
 
+# runs at periodic iterations
+def run_intermediate_scripts(curr_iteration) :
+    """
+    Find the most recently created folder matching the pattern
+
+    Must change the following variables in this script depending on the test:
+     - current_model_name
+     - --npk.output-vars
+    """
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    # CHANGE THIS NAME
+    current_model_name = "unconstrained_test"
+    pattern = "DQN/grape-lnpkw-v0__rl_utils__1__*"
+    folders = glob.glob(os.path.join(base_dir, "data/grapevine", current_model_name, pattern))
+    # check if folder exists
+    if not folders :
+        return None
+    dynamic_folder = max(folders, key=os.path.getctime)
+
+    rel_dynamic_folder = os.path.relpath(dynamic_folder, start=base_dir)
+    rel_current_iteration_folder = os.path.join(rel_dynamic_folder, str(curr_iteration)) + "/"
+    rel_agent_path = os.path.join(rel_dynamic_folder, "agent.pt")
+    data_filename = f"{current_model_name}.npz"
+    rel_data_file_path = os.path.join(rel_current_iteration_folder, data_filename)
+
+    # Command 1: Generate data
+    cmd1 = [
+        "python", "-m", "data_generation.gen_data",
+        "--save-folder", rel_current_iteration_folder,
+        "--data-file", current_model_name,
+        "--agent-path", os.path.join(rel_dynamic_folder, "agent.pt"),
+        "--agent-type", "DQN",
+        "--year-low", "1987", "--year-high", "1987",
+        "--lat-low", "46", "--lat-high", "46",
+        "--lon-low", "-120", "--lon-high", "-120",
+        "--file-type", "npz",
+        "--env-id", "grape-lnpkw-v0",
+        "--agro-file", "grape_agro.yaml",
+        "--npk.output-vars", "LAI", "FIN", "DVS", "WSO", "NAVAIL", "PAVAIL", "KAVAIL", "SM", "TOTN", "TOTP", "TOTK", "TOTIRRIG"
+    ]
+    # Command 2: Plot output
+    cmd2 = [
+        "python", "-m", "data_plotting.vis_data",
+        "--plt", "plot_output",
+        "--data_file", rel_data_file_path,
+        "--fig-folder", rel_current_iteration_folder
+    ]
+    # Command 3: Plot policy
+    cmd3 = [
+        "python", "-m", "data_plotting.vis_data",
+        "--plt", "plot_policy",
+        "--data_file", rel_data_file_path,
+        "--fig-folder", rel_current_iteration_folder
+    ]
+
+    # first make the current iteration directory 
+    abs_iteration_folder = os.path.join(dynamic_folder, str(curr_iteration))
+    os.makedirs(abs_iteration_folder, exist_ok=True)
+    # Run them sequentially
+    try:
+        print(f"Running scripts for iteration {curr_iteration} in {rel_current_iteration_folder}")
+        print("Running data generation...")
+        subprocess.run(cmd1, check=True, cwd=base_dir)
+        print("Running plot output...")
+        subprocess.run(cmd2, check=True, cwd=base_dir)
+        print("Running plot policy...")
+        subprocess.run(cmd3, check=True, cwd=base_dir)  
+    except subprocess.CalledProcessError as e:
+        print(f"Error in iteration {curr_iteration}:")
+        print(f"Command: {' '.join(e.cmd)}")
+        print(f"Error output: {e.stderr}")
+        return None
+
+
 def train(kwargs: Namespace) -> None:
     """
     DQN Training Function
@@ -114,6 +192,13 @@ def train(kwargs: Namespace) -> None:
     )
     start_time = time.time()
 
+    # Track checkpoint count for periodic script execution
+    checkpoint_count = 0
+    num_eval_runs = 10
+    # Calculate how many checkpoints between script runs
+    total_checkpoints = args.total_timesteps // args.checkpoint_frequency
+    checkpoint_interval = max(1, total_checkpoints // num_eval_runs)
+
     obs, _ = envs.reset(seed=args.seed)
     for global_step in range(args.total_timesteps):
 
@@ -122,6 +207,12 @@ def train(kwargs: Namespace) -> None:
             if kwargs.track:
                 wandb.save(f"{wandb.run.dir}/agent.pt", policy="now")
 
+            # Run intermediate scripts at specified checkpoints
+            checkpoint_count += 1
+            if checkpoint_count % checkpoint_interval == 0:
+                current_iteration = global_step // args.train_frequency if args.train_frequency > 0 else global_step
+                run_intermediate_scripts(current_iteration)
+        
         epsilon = linear_schedule(
             args.start_e, args.end_e, args.exploration_fraction * args.total_timesteps, global_step
         )

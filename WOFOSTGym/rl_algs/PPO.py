@@ -25,7 +25,7 @@ import glob
 
 @dataclass
 class Args(RL_Args):
-    total_timesteps: int = 50000 # 5000000   # 1000000
+    total_timesteps: int = 20000 # 5000000   # 1000000
     """total timesteps of the experiments"""
     learning_rate: float = 2.5e-4
     """the learning rate of the optimizer"""
@@ -234,7 +234,7 @@ def train(kwargs: Namespace) -> None:
     next_obs = torch.Tensor(next_obs).to(device)
     next_done = torch.zeros(args.num_envs).to(device)
 
-    num_eval_runs = 3
+    num_eval_runs = 10
     interval = max(1, args.num_iterations // num_eval_runs)
 
     for iteration in range(1, args.num_iterations + 1):
