@@ -1,6 +1,6 @@
 AgroManagement:
     Site:
-        latitude: 46  # 52
+        latitude: 43  # 52
         longitude: -120   # 5
         year: 1987
     SoilCalendar:
