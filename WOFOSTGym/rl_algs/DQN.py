@@ -126,7 +126,7 @@ def run_intermediate_scripts(curr_iteration) :
         "--agent-path", os.path.join(rel_dynamic_folder, "agent.pt"),
         "--agent-type", "DQN",
         "--year-low", "1987", "--year-high", "1987",
-        "--lat-low", "46", "--lat-high", "46",
+        "--lat-low", "43", "--lat-high", "43",
         "--lon-low", "-120", "--lon-high", "-120",
         "--file-type", "npz",
         "--env-id", "grape-lnpkw-v0",
