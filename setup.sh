@@ -3,6 +3,9 @@
 # Initialize conda for this script without needing to restart shell
 eval "$(conda shell.bash hook)"
 
+# Suppress pygame pkg_resources warning
+export PYTHONWARNINGS="ignore::UserWarning:pygame.pkgdata"
+
 # run this script from Senior_Thesis directory, not WOFOSTGym
 current_dir=$PWD
 cd $current_dir/WOFOSTGym || exit
