@@ -11,11 +11,11 @@ current_dir=$PWD
 cd $current_dir/WOFOSTGym || exit
 
 # Create conda environment with base packages
-conda create -n WOFOSTGym_test python=3.12 -y
-conda activate WOFOSTGym_test
+conda create -n WOFOSTGym python=3.12 -y
+conda activate WOFOSTGym
 
 # Install conda packages
-cconda install -c pytorch -c nvidia -c defaults \
+conda install -c pytorch -c nvidia -c defaults \
     pytorch=2.5.1=py3.12_cuda12.1_cudnn9.1.0_0 \
     torchvision=0.20.1=py312_cu121 \
     torchaudio=2.5.1=py312_cu121 \
